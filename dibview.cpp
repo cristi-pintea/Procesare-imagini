@@ -118,6 +118,7 @@ BEGIN_MESSAGE_MAP(CDibView, CScrollView)
 	ON_COMMAND(ID_EXPAND_EXPAND1TIME, &CDibView::OnExpandExpand1time)
 	ON_COMMAND(ID_EXPAND_EXPAND1TIMEV2, &CDibView::OnExpandExpand1timev2)
 	ON_COMMAND(ID_EXPAND_EXPANDMULTIPLETIMES, &CDibView::OnExpandExpandmultipletimes)
+	ON_COMMAND(ID_LAPLACE_LAPLACE, &CDibView::OnLaplaceLaplace)
 END_MESSAGE_MAP()
 
 /////////////////////////////////////////////////////////////////////////////
@@ -379,8 +380,8 @@ void CDibView::OnProcessingReduce()
 				temp[count] = lpSrc[i*w + j];
 				count++;
 			}
-	height = dwHeight / 2;
-	width = dwWidth / 2;
+	height = 128;
+	width = 128;
 
 	/*info.Format(_TEXT("%d,%d"), dwHeight, dwWidth);
 	AfxMessageBox(info);*/
@@ -399,30 +400,7 @@ void CDibView::OnProcessingReduce()
 
 void CDibView::OnProcessingDifference()
 {
-	BEGIN_PROCESSING();
-	int nucleu[5][5] = { { 1, 4, 6, 4, 1 }, { 4, 16, 24, 16, 4 }, { 6, 24, 36, 24, 6 }, { 4, 16, 24, 16, 4 }, { 1, 4, 6, 4, 1 } };
-	int *convoluteMatrix = (int*)malloc(dwHeight*dwWidth*sizeof(int));
-	for (int i = 0; i<dwHeight - 0; i++)
-		for (int j = 0; j < dwWidth - 0; j++)
-		{
-			int pixel = lpSrc[i*w + j];
-			int value = 0;
-			for (int k = 0; k < 5; k++)
-				for (int l = 0; l < 5; l++)
-				{
-					value += nucleu[k][l] * lpSrc[(i + k - 2)*w + (j + l - 2)];
-				}
-			convoluteMatrix[i*w + j] = value / 256;
-			if (convoluteMatrix[i*w + j] - lpSrc[i*w + j] < 0)
-			{
-				lpDst[i*w + j] = 0;
-			}
-			else
-			{
-				lpDst[i*w + j] = convoluteMatrix[i*w + j] - lpSrc[i*w + j];
-			}
-		}
-	END_PROCESSING("Band-Pass");
+
 }
 
 int *intermediateMatrix;
@@ -431,61 +409,12 @@ int matrixHeight;
 int matrixWidth;
 void CDibView::OnProcessingDown()
 {
-	BEGIN_PROCESSING();
-	intermediateMatrix = (int*)malloc(dwHeight*dwWidth*sizeof(int));
-	int nucleu[5][5] = { { 1, 4, 6, 4, 1 }, { 4, 16, 24, 16, 4 }, { 6, 24, 36, 24, 6 }, { 4, 16, 24, 16, 4 }, { 1, 4, 6, 4, 1 } };
-
-	//initializari
-	matrixHeight = dwHeight;
-	matrixWidth = dwWidth;
-	vector<vector<vector<double> > > matrixes;
-
-	matrixes.resize(NR_OF_TIMES);
-	for (int i = 0; i < 7; i++)
-	{
-		matrixes[i].resize(matrixHeight);
-
-		for (int j = 0; j < dwHeight; j++)
-		{
-			matrixes[i][j].resize(matrixWidth);
-		}
-	}
-
-
-	for (int cnt = 0; cnt < 7; cnt++)
-	{
-	for (int i = 2; i<dwHeight - 2; i++)
-		for (int j = 2; j < dwWidth - 2; j++)
-		{
-			int pixel = lpSrc[i*w + j];
-			int value = 0;
-			for (int k = 0; k < 5; k++)
-				for (int l = 0; l < 5; l++)
-				{
-					if (cnt == 0)
-					{
-						value += nucleu[k][l] * lpSrc[(i + k - 2)*w + (j + l - 2)];
-					}
-					else
-					{
-						value += nucleu[k][l] * matrixes[cnt-1][i + k - 2][(j + l - 2)];
-					}
-				}
-			matrixes[cnt][i][j] = value / 256;
-		}
-
-	}
-	for (int i = 0; i < dwHeight; i++)
-		for (int j = 0; j < dwWidth; j++)
-		{
-			lpDst[i*w + j] = matrixes[7][i][j];
-		}
-	END_PROCESSING("Down-Sampling");
 
 }
 
 int NR_OF_TIMES1 = 8;
 
+vector<vector<double>> gauss;
 void CDibView::OnProcessingReduceresuccesiva()
 {
 	CString info;
@@ -494,53 +423,79 @@ void CDibView::OnProcessingReduceresuccesiva()
 	int height, width;
 	int *temp = (int *)malloc(dwHeight*dwWidth*(sizeof(int)));
 	int i, j, count = 0;
-	
-	vector<vector<double>> imagini;
-	imagini.resize(NR_OF_TIMES1);
+	//int nucleu[5][5] = { { 1, 4, 6, 4, 1 }, { 4, 16, 24, 16, 4 }, { 6, 24, 36, 24, 6 }, { 4, 16, 24, 16, 4 }, { 1, 4, 6, 4, 1 } };
+	int nucleu[3][3] = { { 1, 2, 1 },
+						{ 2, 4, 2 },
+						{ 1, 2, 1 }
+	};
+	gauss.resize(NR_OF_TIMES1);
 
-	//alocam spatiu pentru toate cle 8 imagini
+	//alocam spatiu pentru toate cele 8 imagini
 	for (i = 0; i < 8; i++)
 	{
-		imagini[i].resize(dwHeight * dwWidth);
+		gauss[i].resize(dwHeight * dwWidth);
 	}
 
+	//initializare imagini sursa
 	for (i = 0; i < dwHeight; i++)
 		for (j = 0; j < dwWidth; j++)
-			imagini[0][i*w + j] = lpSrc[i*w + j];
+			gauss[0][i*w + j] = lpSrc[i*w + j];
 
 	
 	height = dwHeight;
 	width = dwWidth;
-
-	for (int nr = 1; nr < 5; nr++)
+	
+	//reducerea imaginii
+	for (int nr = 1; nr < 4; nr++)
 	{
 		count = 0;
-
 		for (i = 0; i < dwHeight; i++)
 			for (j = 0; j < dwWidth; j++)
-				imagini[nr][i*w + j] = 255;
+				gauss[nr][i*w + j] = 255;
+
+
+		for (i = 1; i < dwHeight - 1; i++)
+			for (j = 1; j < dwWidth - 1; j++)
+			{
+				int value = 0;
+				for (int k = 0; k < 3; k++)
+					for (int l = 0; l < 3; l++)
+					{
+						value += nucleu[k][l] * gauss[nr - 1][(i + k - 1)*w + (j + l - 1)];
+					}
+				temp[i*w + j] = value / 16;
+
+			}
 
 		for (i = 0; i < dwHeight; i++)
 			for (j = 0; j < dwWidth; j++)
 				if (i % 2 == 0 && j % 2 == 0)
 				{
-					imagini[nr][count] = imagini[nr - 1][i*w + j];
+					gauss[nr][count] = temp[i*w + j];
 					count++;
 				}
 		height = height / 2;
 		width = width / 2;
 	}
+	
+	
+		
+				
+	
 
 	/*info.Format(_TEXT("%d,%d"), height, width);
 	AfxMessageBox(info);*/
+
+	
 
 	for (i = 0; i < dwHeight; i++)
 		for (j = 0; j < dwWidth; j++)
 			lpDst[i*w + j] = 255;
 
+
 	for (i = 0; i < height; i++)
 		for (j = 0; j < width; j++)
-			lpDst[i*w + j] = imagini[4][i*width + j];
+			lpDst[i*w + j] = gauss[3][i*width + j];
 
 	END_PROCESSING("Micsorare");
 }
@@ -596,54 +551,6 @@ void CDibView::OnGaussGaussinitialimage()
 
 void CDibView::OnProcessingExpand()
 {
-	BEGIN_PROCESSING();
-	int height, width;
-	int *temp = (int *)malloc(dwHeight*dwWidth*(sizeof(int)));
-	int i, j, count = 0;
-	CString info;
-
-	for (i = 0; i < dwHeight; i++)
-		for (j = 0; j < dwWidth; j++)
-			lpDst[i*w + j] = 255;
-
-	/*for (i = 0; i < dwHeight; i++)
-		for (j = 0; j < dwWidth; j++)
-			{
-				temp[i*w +j] = lpSrc[count];
-				temp[i*w + j + 1] = lpSrc[count];
-				count++;
-			}*/
-	
-	dwHeight = 128;
-	dwWidth = 128;
-	w = 128;
-
-	height = dwHeight * 2;
-	width = dwWidth * 2;
-
-	/*info.Format(_TEXT("%d,%d"), height, width);
-	AfxMessageBox(info);*/
-	/*count = 0;
-	for (i = 0; i < height; i++)
-		for (j = 0; j < width; j++)
-		{
-			lpDst[i*w + j] = lpSrc[(i*(w)+j)/2];
-			if (i%2==0 && j%2==0)
-				count++;
-
-		}*/
-	for (i = 0; i < dwHeight; i++)
-		for (j = 0; j < dwWidth; j=j+2)
-		{
-			lpDst[i*w + j] = lpSrc[(i*w+j)];
-			lpDst[i*w + j + 1] = lpSrc[(i*w + j)];
-			
-
-		}
-
-	END_PROCESSING("Expand");
-
-
 }
 
 int *expanded;
@@ -676,97 +583,62 @@ void CDibView::OnExpandExpand1time()
 
 void CDibView::OnExpandExpand1timev2()
 {
-	BEGIN_PROCESSING();
-	int height, width;
-	int *temp = (int *)malloc(dwHeight*dwWidth*(sizeof(int)));
-	int i, j, count = 0;
-	CString info;
 
-	for (i = 0; i < dwHeight; i++)
-		for (j = 0; j < dwWidth; j++)
-			lpDst[i*w + j] = 255;
-
-	/*for (i = 0; i < dwHeight; i++)
-	for (j = 0; j < dwWidth; j++)
-	{
-	temp[i*w +j] = lpSrc[count];
-	temp[i*w + j + 1] = lpSrc[count];
-	count++;
-	}*/
-
-	dwHeight = 128;
-	dwWidth = 128;
-	w = 128;
-
-	height = dwHeight * 2;
-	width = dwWidth * 2;
-
-	/*info.Format(_TEXT("%d,%d"), height, width);
-	AfxMessageBox(info);*/
-	count = 0;
-	for (i = 0; i < height; i++)
-	for (j = 0; j < width; j++)
-	{
-	lpDst[i*w + j] = lpSrc[(i*w+j)/2];
-	if (i%2==0 && j%2==0)
-	count++;
-
-	}
-	/*for (i = 0; i < dwHeight; i++)
-		for (j = 0; j < dwWidth; j = j + 2)
-		{
-			lpDst[i*w + j] = lpSrc[(i*w + j)];
-			lpDst[i*w + j + 1] = lpSrc[(i*w + j)];
-			lpDst[(i+1)*w + j] = lpSrc[(i*w + j)];
-			lpDst[(i+1)*w + j + 1] = lpSrc[(i*w + j)];
-
-
-		}*/
-
-	END_PROCESSING("Expand");
 }
 
-
+vector<vector<double>> econv;
 void CDibView::OnExpandExpandmultipletimes()
 {
 	BEGIN_PROCESSING();
 	int height, width;
 	expanded = (int *)malloc(dwHeight*dwWidth*(sizeof(int))); //imaginea expandata temporara
+	int *newmatrix = (int *)malloc(dwHeight*dwWidth*(sizeof(int)));
 	int i, j, count = 0;
-
-	vector<vector<double>> imagini;
-	imagini.resize(NR_OF_TIMES1);
+	int nucleu[3][3] = { { 1, 2, 1 },
+	{ 2, 4, 2 },
+	{ 1, 2, 1 }
+	};
+	
+	econv.resize(NR_OF_TIMES1);
 
 	//alocam spatiu pentru toate cle 8 imagini
 	for (i = 0; i < 8; i++)
 	{
-		imagini[i].resize(dwHeight * dwWidth);
+		econv[i].resize(dwHeight * dwWidth);
 	}
-
+	//nu conteaza pt ca econv foloseste gauss de i+1 deci gauss de 1 e primul
 	for (i = 0; i < dwHeight; i++)
 		for (j = 0; j < dwWidth; j++)
-			imagini[0][i*w + j] = lpSrc[i*w + j];
+			econv[0][i*w + j] = lpSrc[i*w + j];
+
 
 	height = dwHeight / 2;
     width = dwWidth / 2;
 	
 	int ok = 0;
 
-	for (int nr = 1; nr < 5; nr++)
+	for (int nr = 0; nr < 3; nr++)
 	{
 
 		for (i = 0; i < height; i++)
 			for (j = 0; j < width; j++)
 			{
-				expanded[2 * i*w + 2 * j] = imagini[nr-1][i*w + j];
-				expanded[2 * i*w + 2 * j + 1] = imagini[nr-1][i*w + j];
-				expanded[(2 * i + 1)*w + 2 * j] = imagini[nr-1][i*w + j];
-				expanded[(2 * i + 1)*w + 2 * j + 1] = imagini[nr-1][i*w + j];
+				expanded[2 * i*w + 2 * j] = gauss[nr+1][i*w + j];
+				expanded[2 * i*w + 2 * j + 1] = gauss[nr+1][i*w + j];
+				expanded[(2 * i + 1)*w + 2 * j] = gauss[nr+1][i*w + j];
+				expanded[(2 * i + 1)*w + 2 * j + 1] = gauss[nr+1][i*w + j];
 			}
 		for (i = 0; i < dwHeight; i++)
 			for (j = 0; j < dwWidth; j++)
 			{
-				imagini[nr][i*w + j] = expanded[i*w + j];
+				int value = 0;
+				for (int k = 0; k < 3; k++)
+					for (int l = 0; l < 3; l++)
+					{
+						value += nucleu[k][l] * expanded[(i + k - 1)*w + (j + l - 1)];
+					}
+				
+				econv[nr][i*w + j] = value / 16;
 
 			}
 		
@@ -775,8 +647,38 @@ void CDibView::OnExpandExpandmultipletimes()
 		for (j = 0; j < dwWidth; j++)
 		{
 
-			lpDst[i*w + j] = imagini[4][i*w + j];
+			lpDst[i*w + j] = econv[0][i*w + j];
 		}
 	
 	END_PROCESSING("EXPAND");
+}
+
+vector<vector<double>> laplaceMatrix;
+void CDibView::OnLaplaceLaplace()
+{
+	BEGIN_PROCESSING();
+	laplaceMatrix.resize(NR_OF_TIMES1);
+
+	//alocam spatiu pentru toate cele 8 imagini
+	for (int i = 0; i < 8; i++)
+	{
+		laplaceMatrix[i].resize(dwHeight * dwWidth);
+	}
+	for (int nr = 0; nr < 3; nr++)
+	{
+		for (int i = 0; i < dwHeight; i++)
+			for (int j = 0; j < dwWidth; j++)
+			{
+				laplaceMatrix[nr][i*w + j] = gauss[nr][i*w + j] - econv[nr][i*w + j]; 
+				//if (laplaceMatrix[nr][i*w + j] < 0)laplaceMatrix[nr][i*w + j] = 0;
+			}
+
+	}
+	for (int i = 0; i < dwHeight; i++)
+		for (int j = 0; j < dwWidth; j++)
+		{
+			lpDst[i*w + j] = laplaceMatrix[0][i*w + j];
+		}
+
+	END_PROCESSING("Laplace");
 }
